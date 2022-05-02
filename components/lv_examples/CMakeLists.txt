@@ -1,10 +1,11 @@
 if(ESP_PLATFORM)
 
-file(GLOB_RECURSE SOURCES lv_examples/*.c)
+# Don't build example
+# file(GLOB_RECURSE SOURCES lv_examples/*.c)
 
-idf_component_register(SRCS ${SOURCES}
-                       INCLUDE_DIRS .
-                       REQUIRES lvgl)
+# idf_component_register(SRCS ${SOURCES}
+#                        INCLUDE_DIRS .
+#                        REQUIRES lvgl)
 
 else()
     message(FATAL_ERROR "LVGL LV examples: ESP_PLATFORM is not defined. Try reinstalling ESP-IDF.")

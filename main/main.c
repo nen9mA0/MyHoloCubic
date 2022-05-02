@@ -20,67 +20,145 @@
 #include "esp_system.h"
 #include "driver/gpio.h"
 
-/* Littlevgl specific */
-#ifdef LV_LVGL_H_INCLUDE_SIMPLE
-#include "lvgl.h"
-#else
-#include "lvgl/lvgl.h"
-#endif
+#include "esp_err.h"
 
+// ==== sdcard ====
+#include "sdmmc.h"
+#include <sys/unistd.h>
+#include <sys/stat.h>
+
+// ====  wifi  ====
+#include "nvs_flash.h"
+#include "wifi_sta.h"
+
+// ==== ota ====
+#include "ota.h"
+
+// ====  mpu ====
+#include "mpu.h"
+
+// ==== input ====
+#include "input.h"
+
+// ==== lvgl ====
+#include "lvgl.h"
 #include "lvgl_helpers.h"
 
-#ifndef CONFIG_LV_TFT_DISPLAY_MONOCHROME
-    #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        #include "lv_examples/src/lv_demo_widgets/lv_demo_widgets.h"
-    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
-        #include "lv_examples/src/lv_demo_keypad_encoder/lv_demo_keypad_encoder.h"
-    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
-        #include "lv_examples/src/lv_demo_benchmark/lv_demo_benchmark.h"
-    #elif defined CONFIG_LV_USE_DEMO_STRESS
-        #include "lv_examples/src/lv_demo_stress/lv_demo_stress.h"
-    #else
-        #error "No demo application selected."
-    #endif
-#endif
+// ==== link list ====
+#include "lvgl/src/lv_misc/lv_ll.h"
+
+
+#include "clock.h"
 
 /*********************
  *      DEFINES
  *********************/
-#define TAG "demo"
 #define LV_TICK_PERIOD_MS 1
 
 /**********************
  *  STATIC PROTOTYPES
  **********************/
 static void lv_tick_task(void *arg);
-static void guiTask(void *pvParameter);
-static void create_demo_application(void);
+static void guiTask(void *arg);
+// static void mpu_test_task(void *arg);
+// static void wifi_connect_task(void *arg);
 
-/**********************
- *   APPLICATION MAIN
- **********************/
-void app_main() {
+const char TAG[] = "main";
+
+const char gui_task_str[] = "gui";
+const char clock_tick_task_str[] = "clock_tick";
+const char wifi_task_str[] = "wifi";
+const char gpio_task_str[] = "gpio";
+
+bool ota_done = false;
+bool wifi_disconnected = true;
+lv_ll_t ll_task;
+lv_ll_node_t *head;
+
+
+esp_err_t init(int *err_bit)
+{
+    esp_err_t err;
+
+    // sd card init
+    err = sdmmc_init();
+    if(err)
+        *err_bit |= 0x1;
+
+    // nvs init for wifi
+    err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK( err );
+    if(err)
+        *err_bit |= 0x2;
+
+
+    err = wifi_init();
+    if(err)
+        *err_bit |= 0x4;
+
+    // mpu serial init
+    err = mpu_serial_init();
+    if(err)
+        *err_bit |= 0x8;
+
+    // input init
+    // input_init();
+
+    return err;
+}
+
+
+
+void app_main()
+{
+    esp_err_t ret;
+    int err_bit;
+    TaskHandle_t handle;
+    lv_ll_node_t *tmp;
 
     /* If you want to use a task to create the graphic, you NEED to create a Pinned task
      * Otherwise there can be problem such as memory corruption and so on.
      * NOTE: When not using Wi-Fi nor Bluetooth you can pin the guiTask to core 0 */
-    xTaskCreatePinnedToCore(guiTask, "gui", 4096*2, NULL, 0, NULL, 1);
+
+    ret = init(&err_bit);
+
+    if( (err_bit & 0x4) == 0)      // if wifi connected
+        ret = ota_start(url);
+
+    xTaskCreate(guiTask, gui_task_str, 2048*2, NULL, 5, NULL);
+    // input button invalid because circuit is wrong
+    // xTaskCreate(gpio_task, gpio_task_str, 2048, NULL, 5, NULL);
 }
 
 /* Creates a semaphore to handle concurrent call to lvgl stuff
  * If you wish to call *any* lvgl function from other threads/tasks
  * you should lock on the very same semaphore! */
 SemaphoreHandle_t xGuiSemaphore;
+lv_disp_t *disp;
 
-static void guiTask(void *pvParameter) {
+void cb_mirror_framebuffer(lv_disp_drv_t * drv, const lv_area_t * area, lv_color_t * color_map)
+{
+    disp_driver_flush(drv, area, color_map);
+}
 
-    (void) pvParameter;
+static void guiTask(void *arg)
+{
+    // lv_obj_t *old_scr = NULL;
+    // lv_obj_t *new_scr = NULL;
+    (void) arg;
     xGuiSemaphore = xSemaphoreCreateMutex();
 
+    // lvgl init
     lv_init();
-
     /* Initialize SPI or I2C bus used by the drivers */
     lvgl_driver_init();
+
+    ESP_LOGI(TAG, "Display Size: %d  %d", LV_VER_RES_MAX, LV_HOR_RES_MAX);
 
     lv_color_t* buf1 = heap_caps_malloc(DISP_BUF_SIZE * sizeof(lv_color_t), MALLOC_CAP_DMA);
     assert(buf1 != NULL);
@@ -112,7 +190,9 @@ static void guiTask(void *pvParameter) {
 
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
-    disp_drv.flush_cb = disp_driver_flush;
+    disp_drv.flush_cb = cb_mirror_framebuffer;
+    disp_drv.rotated = LV_DISP_MIRROR;
+    disp_drv.sw_rotate = 1;
 
     /* When using a monochrome display we need to register the callbacks:
      * - rounder_cb
@@ -123,7 +203,7 @@ static void guiTask(void *pvParameter) {
 #endif
 
     disp_drv.buffer = &disp_buf;
-    lv_disp_drv_register(&disp_drv);
+    disp = lv_disp_drv_register(&disp_drv);
 
     /* Register an input device when enabled on the menuconfig */
 #if CONFIG_LV_TOUCH_CONTROLLER != TOUCH_CONTROLLER_NONE
@@ -144,17 +224,17 @@ static void guiTask(void *pvParameter) {
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, LV_TICK_PERIOD_MS * 1000));
 
     /* Create the demo application */
-    create_demo_application();
+    digital_clock(url);
 
     while (1) {
         /* Delay 1 tick (assumes FreeRTOS tick is 10ms */
         vTaskDelay(pdMS_TO_TICKS(10));
-
         /* Try to take the semaphore, call lvgl related function on success */
-        if (pdTRUE == xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+        if (pdTRUE == xSemaphoreTake(xGuiSemaphore, portMAX_DELAY))
+        {
             lv_task_handler();
             xSemaphoreGive(xGuiSemaphore);
-       }
+        }
     }
 
     /* A task should NEVER return */
@@ -165,46 +245,89 @@ static void guiTask(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
-static void create_demo_application(void)
+
+static void lv_tick_task(void *arg)
 {
-    /* When using a monochrome display we only show "Hello World" centered on the
-     * screen */
-#if defined CONFIG_LV_TFT_DISPLAY_MONOCHROME || \
-    defined CONFIG_LV_TFT_DISPLAY_CONTROLLER_ST7735S
-
-    /* use a pretty small demo for monochrome displays */
-    /* Get the current screen  */
-    lv_obj_t * scr = lv_disp_get_scr_act(NULL);
-
-    /*Create a Label on the currently active screen*/
-    lv_obj_t * label1 =  lv_label_create(scr, NULL);
-
-    /*Modify the Label's text*/
-    lv_label_set_text(label1, "Hello\nworld");
-
-    /* Align the Label to the center
-     * NULL means align on parent (which is the screen now)
-     * 0, 0 at the end means an x, y offset after alignment*/
-    lv_obj_align(label1, NULL, LV_ALIGN_CENTER, 0, 0);
-#else
-    /* Otherwise we show the selected demo */
-
-    #if defined CONFIG_LV_USE_DEMO_WIDGETS
-        lv_demo_widgets();
-    #elif defined CONFIG_LV_USE_DEMO_KEYPAD_AND_ENCODER
-        lv_demo_keypad_encoder();
-    #elif defined CONFIG_LV_USE_DEMO_BENCHMARK
-        lv_demo_benchmark();
-    #elif defined CONFIG_LV_USE_DEMO_STRESS
-        lv_demo_stress();
-    #else
-        #error "No demo application selected."
-    #endif
-#endif
-}
-
-static void lv_tick_task(void *arg) {
     (void) arg;
 
     lv_tick_inc(LV_TICK_PERIOD_MS);
 }
+
+
+// static void wifi_connect_task(void *arg)
+// {
+//     esp_err_t err;
+//     lv_ll_node_t *node;
+
+//     while(wifi_disconnected)
+//     {
+//         node = head;
+//         while(_lv_ll_get_next(&ll_task, node) != NULL)
+//         {
+//             node = _lv_ll_get_next(&ll_task, node);
+//             if(node != arg)
+//             {
+//                 ESP_LOGI(TAG, "Suspend handle %x", *node);
+//                 vTaskSuspend(*(TaskHandle_t *)node);
+//             }
+//             else
+//             {
+//                 ESP_LOGI(TAG, "handle equal");
+//             }
+//         }
+
+//         // wifi init
+//         err = wifi_init();
+//         if(!err)        // if wifi connected
+//         {
+//             wifi_disconnected = false;
+//             if(!ota_done)
+//             {
+//                 err = ota_start(url);
+//                 ota_done = true;        // whether ota is successful or not, mark it as success.
+//                 if(!err)
+//                 {
+//                     break;
+//                 }
+//             }
+
+//         }
+//         node = head;
+//         while(_lv_ll_get_next(&ll_task, node) != NULL)
+//         {
+//             node = _lv_ll_get_next(&ll_task, node);
+//             if(node != arg)
+//             {
+//                 ESP_LOGI(TAG, "Resume handle %x", *node);
+//                 vTaskResume(*(TaskHandle_t *)node);
+//             }
+//             else
+//             {
+//                 ESP_LOGI(TAG, "handle equal");
+//             }
+//         }
+//         vTaskDelay(10000 / portTICK_RATE_MS);
+//     }
+//     vTaskDelete(NULL);
+// }
+
+// static void mpu_test_task(void *arg)
+// {
+//     int len = 0;
+//     uint8_t *data;
+
+//     // waiting for calibration
+//     vTaskDelay(3000 / portTICK_RATE_MS);
+
+//     mpu_set_output(0x53);
+//     vTaskDelay(20 / portTICK_RATE_MS);
+//     while(1)
+//     {
+//         data = mpu_get_data(&len);
+//         for(int i=0; i<len; i++)
+//             printf("%X ", data[i]);
+//         printf("\n");
+
+//         vTaskDelay(500 / portTICK_RATE_MS);
+//     }
+// }
