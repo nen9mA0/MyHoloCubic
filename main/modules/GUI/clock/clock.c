@@ -237,73 +237,39 @@ void UpdateLabel(void)
     time_wd = weekday[dayofweek];
 }
 
-static void http_cleanup(esp_http_client_handle_t client)
-{
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-}
-
 esp_err_t ConfigTime(char *url)
 {
     esp_err_t err;
     char data[BUFFSIZE];
-    static char update_url[50];
+    static char url_saved[URL_LENGTH];
 
-    if(url != NULL)
+    if(url)
     {
-        strcpy(update_url, url);
-        strcat(update_url, "/time");
-        ESP_LOGI(TAG, "Time Update URL: %s", update_url);
+        strcpy(url_saved, url);
     }
 
-    esp_http_client_config_t config = {
-        .url = update_url,
-        .timeout_ms = TIME_RECV_TIMEOUT};
+    esp_http_client_handle_t handle = ClientInit(url_saved, "/time");
+    if(handle)
+    {
+        err = ClientOpen(handle);
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to initialise HTTP connection");
-        return -1;
-    }
-    err = esp_http_client_open(client, 0);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
-        esp_http_client_cleanup(client);
-        return -1;
-    }
-    esp_http_client_fetch_headers(client);
-    int data_read = esp_http_client_read(client, data, BUFFSIZE);
-    if (data_read < 0)
-    {
-        ESP_LOGE(TAG, "Error: SSL data read error");
-        http_cleanup(client);
-        return -1;
-    }
-    else if (data_read > 0)
-    {
-        data[data_read] = '\0';
-        ESP_LOGI(TAG, "Time Update: %s", data);
-        sscanf(data, "%d:%d:%d|%d/%d/%d|%d|%d", &hour, &min, &sec, &year, &month, &dayofmonth, &day, &dayofweek);
-        http_cleanup(client);
+        int data_read = ClientRead(handle, data, BUFFSIZE);
+        if (data_read > 0)
+        {
+            ESP_LOGI(TAG, "Time Update: %s", data);
+            sscanf(data, "%d:%d:%d|%d/%d/%d|%d|%d", &hour, &min, &sec, &year, &month, &dayofmonth, &day, &dayofweek);
+        }
+        else if (data_read == 0)
+        {
+            ESP_LOGI(TAG, "Time Update: Get Null");
+        }
+        else
+        {
+            // Other situations all have been cleanup
+            return -1;
+        }
+        ClientCleanup(handle);
         return 0;
     }
-    else
-    {
-        /*
-            * As esp_http_client_read never returns negative error code, we rely on
-            * `errno` to check for underlying transport connectivity closure if any
-            */
-        if (errno == ECONNRESET || errno == ENOTCONN)
-        {
-            ESP_LOGE(TAG, "Connection closed, errno = %d", errno);
-        }
-        if (esp_http_client_is_complete_data_received(client) == true)
-        {
-            ESP_LOGI(TAG, "Connection closed");
-        }
-        http_cleanup(client);
-        return -1;
-    }
+    return -1;
 }

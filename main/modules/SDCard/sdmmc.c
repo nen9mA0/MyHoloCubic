@@ -25,9 +25,9 @@ esp_err_t sdmmc_init(void)
     // 1 bit mode
     slot_config.width = 1;
 
-    gpio_set_pull_mode(15, GPIO_PULLUP_ONLY);   // CMD, needed in 4- and 1- line modes
-    gpio_set_pull_mode(2, GPIO_PULLUP_ONLY);    // D0, needed in 4- and 1-line modes
-    gpio_set_pull_mode(13, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
+    gpio_set_pull_mode(PIN_NUM_CMD, GPIO_PULLUP_ONLY);   // CMD, needed in 4- and 1- line modes
+    gpio_set_pull_mode(PIN_NUM_DAT0, GPIO_PULLUP_ONLY);    // D0, needed in 4- and 1-line modes
+    gpio_set_pull_mode(PIN_NUM_CD, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
 
     ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 

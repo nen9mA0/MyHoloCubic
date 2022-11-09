@@ -7,6 +7,7 @@ LIST(APPEND SOURCES "modules/wifi/wifi_sta.c")
 LIST(APPEND SOURCES "modules/mpu6050/mpu.c")
 LIST(APPEND SOURCES "modules/ota/ota.c")
 LIST(APPEND SOURCES "modules/gpio/input.c")
+LIST(APPEND SOURCES "modules/http/myhttp_client.c")
 
 # message(FATAL_ERROR "SOURCES: ${SOURCES}")
 
@@ -16,6 +17,7 @@ LIST(APPEND INCLUDES "modules/wifi")
 LIST(APPEND INCLUDES "modules/mpu6050")
 LIST(APPEND INCLUDES "modules/ota")
 LIST(APPEND INCLUDES "modules/gpio")
+LIST(APPEND INCLUDES "modules/http")
 
 LIST(APPEND INCLUDES "../components")
 

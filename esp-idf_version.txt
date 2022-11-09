@@ -1,0 +1,2 @@
+v4.3.1
+https://github.com/espressif/esp-idf/releases/download/v4.3.1/esp-idf-v4.3.1.zip

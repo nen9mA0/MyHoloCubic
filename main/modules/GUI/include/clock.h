@@ -17,6 +17,8 @@
 #include "lvgl/lvgl.h"
 #endif
 
+#include "../../http/myhttp.h"
+
 #define TIME_RECV_TIMEOUT 5000
 #define BUFFSIZE 30
 
