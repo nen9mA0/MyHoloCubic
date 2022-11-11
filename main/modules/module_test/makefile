@@ -3,10 +3,11 @@ INCLUDE=
 CFLAG=-g
 
 # SRC=script_tst.c ../script_engine/parser.c
-SRC=crc_tst.c
+# SRC=crc_tst.c
+SRC=interactive_tst.c
 OBJ=$(subst ".c",".o",$(SRC))
 # TARGET=script_tst
-TARGET=crc_tst
+TARGET=interactive_tst
 
 $(TARGET):$(OBJ)
 	$(CC) $(CFLAG) $^ -o $@

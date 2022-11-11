@@ -1,5 +1,7 @@
 #include "clock.h"
 
+#define BUFSIZE 30
+
 const char * const weekday[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "SAT", "Sun"};
 
 char time_hm[20];
@@ -240,7 +242,7 @@ void UpdateLabel(void)
 esp_err_t ConfigTime(char *url)
 {
     esp_err_t err;
-    char data[BUFFSIZE];
+    char data[BUFSIZE+1];
     static char url_saved[URL_LENGTH];
 
     if(url)
@@ -252,24 +254,26 @@ esp_err_t ConfigTime(char *url)
     if(handle)
     {
         err = ClientOpen(handle);
-
-        int data_read = ClientRead(handle, data, BUFFSIZE);
-        if (data_read > 0)
+        if(err>=0)
         {
-            ESP_LOGI(TAG, "Time Update: %s", data);
-            sscanf(data, "%d:%d:%d|%d/%d/%d|%d|%d", &hour, &min, &sec, &year, &month, &dayofmonth, &day, &dayofweek);
+            int data_read = ClientRead(handle, data, BUFSIZE);
+            if (data_read > 0)
+            {
+                ESP_LOGI(TAG, "Time Update: %s", data);
+                sscanf(data, "%d:%d:%d|%d/%d/%d|%d|%d", &hour, &min, &sec, &year, &month, &dayofmonth, &day, &dayofweek);
+            }
+            else if (data_read == 0)
+            {
+                ESP_LOGI(TAG, "Time Update: Get Null");
+            }
+            else
+            {
+                // Other situations all have been cleanup
+                return -1;
+            }
+            ClientCleanup(handle);
+            return 0;
         }
-        else if (data_read == 0)
-        {
-            ESP_LOGI(TAG, "Time Update: Get Null");
-        }
-        else
-        {
-            // Other situations all have been cleanup
-            return -1;
-        }
-        ClientCleanup(handle);
-        return 0;
     }
     return -1;
 }

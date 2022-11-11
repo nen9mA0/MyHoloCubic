@@ -49,7 +49,7 @@
 
 
 #include "clock.h"
-
+#include "script_engine.h"
 /*********************
  *      DEFINES
  *********************/
@@ -128,7 +128,10 @@ void app_main()
     ret = init(&err_bit);
 
     if( (err_bit & 0x4) == 0)      // if wifi connected
+    {
         ret = ota_start(url);
+        ret = UpdateScript(url);
+    }
 
     xTaskCreate(guiTask, gui_task_str, 2048*2, NULL, 5, NULL);
     // input button invalid because circuit is wrong

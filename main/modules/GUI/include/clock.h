@@ -20,7 +20,6 @@
 #include "../../http/myhttp.h"
 
 #define TIME_RECV_TIMEOUT 5000
-#define BUFFSIZE 30
 
 static lv_style_t main_style;
 static lv_style_t label_style_hm;

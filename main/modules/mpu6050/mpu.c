@@ -1,5 +1,7 @@
 #include "mpu.h"
 
+static uint8_t checksum(uint8_t *data, size_t len);
+
 static uint8_t data[BUF_SIZE];
 
 esp_err_t mpu_serial_init(void)

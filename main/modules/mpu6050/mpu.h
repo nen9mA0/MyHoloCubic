@@ -14,7 +14,6 @@
 
 #define BUF_SIZE (1024)
 
-static uint8_t checksum(uint8_t *data, size_t len);
 
 esp_err_t mpu_serial_init(void);
 void mpu_set_output(uint8_t output_bit);

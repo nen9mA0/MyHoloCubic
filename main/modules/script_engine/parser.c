@@ -1,5 +1,6 @@
 #include "script_engine.h"
 
+static const char TAG[] = "script_parser";
 cmd_t* parse(char *str, char *optstr)
 {
     char *cmd_str;
@@ -15,7 +16,7 @@ cmd_t* parse(char *str, char *optstr)
         p += num;
 
         // first scan, to determine number of parameters
-        while(p = next_token(p, &num))
+        while( (p=next_token(p, &num)) != NULL )
         {
             if(p[0] == '-')             // -opt
             {
@@ -61,7 +62,7 @@ cmd_t* parse(char *str, char *optstr)
 
         if(p < end_p)
         {
-            while(p=next_token(p, &num))
+            while( (p=next_token(p, &num)) != NULL)
             {
                 if(p[0] == '-')             // -opt
                 {
@@ -136,4 +137,17 @@ char* next_token(char *str, int *num)
     }
     *num = p-q;
     return q;
+}
+
+
+void print_cmd(cmd_t *p)
+{
+    ESP_LOGI(TAG, "%s\n", p->cmd);
+    for(int i=0; i<p->pair_num; i++)
+    {
+        if(p->pair_table[i].opt != NULL)
+            ESP_LOGI(TAG, "\topt%d: %s", i, p->pair_table[i].opt);
+        if(p->pair_table[i].param != NULL)
+            ESP_LOGI(TAG, "\tparam%d: %s", i, p->pair_table[i].param);
+    }
 }
